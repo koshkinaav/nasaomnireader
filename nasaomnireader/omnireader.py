@@ -5,24 +5,25 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as pp
 import scipy.interpolate as interpolate
+# from spacepy import pycdf
 
 # Attempt to pull in spacepy to get pycdf interface
 # to use faster CDFs
-os.environ["CDF_LIB"] = '/Users/a.konkin/PycharmProjects/NasaOmniReader/venv/lib/python3.9/site-packages'
-try:
-    from spacepy import pycdf
-
-    spacepy_is_available = True
-except ImportError:
-    # print(traceback.format_exc())
-    print(textwrap.dedent("""
-        ------------IMPORTANT----------------------------
-        Unable to import spacepy. Will fall back to
-        using Omni text files, which may have slightly
-        different data and incomplete metadata
-        -------------------------------------------------
-        """))
-    spacepy_is_available = False
+# os.environ["CDF_LIB"] = '/Users/a.konkin/PycharmProjects/NasaOmniReader/venv/lib/python3.9/site-packages'
+# try:
+#     from spacepy import pycdf
+#
+#     spacepy_is_available = True
+# except ImportError:
+#     # print(traceback.format_exc())
+#     print(textwrap.dedent("""
+#         ------------IMPORTANT----------------------------
+#         Unable to import spacepy. Will fall back to
+#         using Omni text files, which may have slightly
+#         different data and incomplete metadata
+#         -------------------------------------------------
+#         """))
+spacepy_is_available = False
 
 # Variables in 1 Hour CDFS
 # ABS_B: CDF_REAL4 [4344]
@@ -207,7 +208,7 @@ class omni_txt_cdf_mimic_var(object):
                     break
         expected_fill = '<missing>' if 'FILLVAL' not in self.attrs else self.attrs['FILLVAL']
         print("Fillval for %s (column %d) was identified as %f, tabluated as %s" % (
-        self.name, self.column, this_fill, str(expected_fill)))
+            self.name, self.column, this_fill, str(expected_fill)))
         return this_fill
 
     def _nan_fill_datapoints(self, vardata):
@@ -236,10 +237,10 @@ class omni_txt_cdf_mimic(object):
     """
 
     def __init__(self, omnitxt, cadence):
-        self.txtfn = omnitxt
+        self.txtfn = omnitxt  # путь на локальном компьютере
         self.cadence = cadence
         try:
-            self.data = np.genfromtxt(omnitxt)
+            self.data = np.genfromtxt(omnitxt)  # делаем из txt массив данных (двумерный)
         except:
             print("Reading from %s" % (omnitxt))
 
@@ -248,7 +249,7 @@ class omni_txt_cdf_mimic(object):
         cdfvars_meta = omnitxtcdf.metadata[cadence]['vars']
         self.vars = {varname: omni_txt_cdf_mimic_var(varname, cdfvars_meta[varname], self.data, cadence) for varname in
                      cdfvars_meta}
-        self.attrs = omnitxtcdf.metadata[cadence]['attrs']
+        self.attrs = omnitxtcdf.metadata[cadence]['attrs']  # в attrs погружаются атрибуты attrs из omnitxtcdf.metadata
         # Compute the equivalent to the CDF variable'Epoch', i.e. the time
         # of each observation as an array of datetimes
         year, doy = self.vars['YR'][:], self.vars['Day'][:]
@@ -271,20 +272,23 @@ class omni_txt_cdf_mimic(object):
 
 class omni_downloader(object):
     def __init__(self, cdf_or_txt='cdf', force_download=False):
-        self.localdir = localdir
+        # инициализируем название файла, который будем скачивать и локальную диреторию
+
+        self.localdir = localdir  # директория, куда сохранятся файлы
         self.cdf_or_txt = cdf_or_txt if spacepy_is_available else 'txt'  # is set at top of file in imports
         self.force_download = force_download
-        self.ftpserv = 'spdf.gsfc.nasa.gov'
-        self.ftpdir = '/pub/data/omni'
+        self.ftpserv = 'spdf.gsfc.nasa.gov'  # адрес сервера, с которого скачиваются данные
+        self.ftpdir = '/pub/data/omni'  # директория, из которой скачиваются данные
         # Hourly CDF are every six months, 5 minute are every month as are 1 min
         if self.cdf_or_txt == 'cdf':
             self.cadence_subdir = {'hourly': 'omni_cdaweb/hourly', '5min': 'omni_cdaweb/hro_5min',
                                    '1min': 'omni_cdaweb/hro_1min'}
             self.filename_gen = {'hourly': lambda dt: '%d/omni2_h0_mrg1hr_%d%.2d01_v01.cdf' % (
-            dt.year, dt.year, 1 if dt.month < 7 else 7),
+                dt.year, dt.year, 1 if dt.month < 7 else 7),
                                  '5min': lambda dt: '%d/omni_hro_5min_%d%.2d01_v01.cdf' % (dt.year, dt.year, dt.month),
                                  '1min': lambda dt: '%d/omni_hro_1min_%d%.2d01_v01.cdf' % (dt.year, dt.year, dt.month)}
         elif self.cdf_or_txt == 'txt':
+            # формируем название файла
             self.cadence_subdir = {'hourly': 'low_res_omni', '5min': 'high_res_omni',
                                    '1min': 'high_res_omni/monthly_1min'}
             self.filename_gen = {'hourly': lambda dt: 'omni2_%d.dat' % (dt.year),
@@ -294,9 +298,12 @@ class omni_downloader(object):
             raise ValueError('Invalid value of cdf_or_txt argument. Valid values are "txt" and "cdf"')
 
     def get_cdf(self, dt, cadence):
+
+        # функция скачивает файл с сервера NASA
         remotefn = self.ftpdir + '/' + self.cadence_subdir[cadence] + '/' + self.filename_gen[cadence](dt)
         remote_path, fn = '/'.join(remotefn.split('/')[:-1]), remotefn.split('/')[-1]
-        localfn = os.path.join(self.localdir, fn)
+        localfn = os.path.join(self.localdir, fn) # создаеем директорию на локалт=ьном компьютере
+        # print('remotefn is ', remotefn)
         if not os.path.exists(localfn) or self.force_download:
 
             # ftp = ftplib.FTP_TLS(self.ftpserv)
@@ -314,7 +321,7 @@ class omni_downloader(object):
             # ftp.quit()
 
             url = 'https://' + self.ftpserv + remotefn
-            print(url)
+            print(url)  # полный адрес файла
 
             head = requests.head(url, allow_redirects=True)
             headers = head.headers
@@ -325,7 +332,7 @@ class omni_downloader(object):
                                         + 'content_type is html. Headers were:\n'
                                         + '{}'.format(headers)))
 
-            response = requests.get(url, allow_redirects=True)
+            response = requests.get(url, allow_redirects=True)  # получаем файл
 
             if self.cdf_or_txt == 'txt':
                 try:
@@ -515,8 +522,8 @@ class omni_interval(object):
         self.ei = np.searchsorted(self.cdfs[-1]['Epoch'][:], enddt)
         if not self.silent:
             print("Created interval between %s and %s, cadence %s, start index %d, end index %d" % (
-            self.startdt.strftime('%Y-%m-%d'),
-            self.enddt.strftime('%Y-%m-%d'), self.cadence, self.si, self.ei))
+                self.startdt.strftime('%Y-%m-%d'),
+                self.enddt.strftime('%Y-%m-%d'), self.cadence, self.si, self.ei))
         self.add_transform('KP', ['hourly'], lambda x: x / 10., 'Hourly Kp*10 -> Kp')
         # Implement computed variables
         self.computed = dict()
@@ -600,7 +607,7 @@ class omni_event(object):
     def __init__(self, startdt, enddt, label=None, cadence='5min', cdf_or_txt='cdf'):
         self.interval = omni_interval(startdt, enddt, cadence, cdf_or_txt=cdf_or_txt)
         datetime2doy = lambda \
-            dt: dt.timetuple().tm_yday + dt.hour / 24. + dt.minute / 24. / 60. + dt.second / 86400. + dt.microsecond / 86400. / 1e6
+                dt: dt.timetuple().tm_yday + dt.hour / 24. + dt.minute / 24. / 60. + dt.second / 86400. + dt.microsecond / 86400. / 1e6
         self.doy = special_datetime.datetimearr2doy(self.interval['Epoch'])
         self.jd = special_datetime.datetimearr2jd(self.interval['Epoch'])
         self.label = '%s-%s' % (startdt.strftime('%m-%d-%Y'), enddt.strftime('%m-%d-%Y')) if label is None else label
@@ -693,14 +700,14 @@ class omni_sea(object):
                         color='b' if 'color' not in kwargs else kwargs['color'],
                         zorder=5., alpha=.1)
         y_med, y_lq, y_uq = np.nanmedian(iy, axis=0), np.nanpercentile(iy, 25, axis=0), np.nanpercentile(iy, 75, axis=0)
-        lab = '' if self.name is None else '%s: ' % (self.name)
-        lab += 'Median %s Response' % (var)
+        lab = '' if self.name is None else '%s: ' % self.name
+        lab += 'Median %s Response' % var
         ax.plot(x, y_med, label=lab, linestyle='-', zorder=10, **kwargs)
         ax.plot(x, y_lq, linestyle=':', zorder=10, **kwargs)
         ax.plot(x, y_uq, linestyle=':', zorder=10, **kwargs)
         # Put units on the y axis
         un = self.get_var_attr(var, 'UNITS')
-        un = '' if un is None else '[%s]' % (un)
+        un = '' if un is None else '[%s]' % un
         ax.set_ylabel(var + un)
         ax.legend()
         ax.fill_between(x, y_lq, y_uq, color='b' if 'color' not in kwargs else kwargs['color'], alpha=.1, zorder=7)
@@ -721,15 +728,15 @@ class omni_sea(object):
             iy[i, :] = event.interpolate(var, x + center_jd)
 
         y_med, y_lq, y_uq = np.nanmedian(iy, axis=0), np.nanpercentile(iy, 25, axis=0), np.nanpercentile(iy, 75, axis=0)
-        header = '' if self.name is None else '# %s: \n' % (self.name)
-        header += '# Omni Cadence: %s\n' % (self.cadence)
-        header += '# First Event: %s\n' % (self.events[0].label)
-        header += '# Last Event: %s\n' % (self.events[-1].label)
+        header = '' if self.name is None else '# %s: \n' % self.name
+        header += '# Omni Cadence: %s\n' % self.cadence
+        header += '# First Event: %s\n' % self.events[0].label
+        header += '# Last Event: %s\n' % self.events[-1].label
         header += '# Generated: %s\n' % (datetime.datetime.now().strftime('%c'))
         header += '# Column 1: Time since center time / zero epoch hour [days] \n'
-        header += '# Column 2: 25th Percentile / 1st Quartile of %s \n' % (var)
-        header += '# Column 3: 50th Percentile / Median of %s \n' % (var)
-        header += '# Column 4: 75th Percentile / 3rd Quartile of %s \n' % (var)
+        header += '# Column 2: 25th Percentile / 1st Quartile of %s \n' % var
+        header += '# Column 3: 50th Percentile / Median of %s \n' % var
+        header += '# Column 4: 75th Percentile / 3rd Quartile of %s \n' % var
 
         # Characters to remove from filename
         whitepunc = [' ', ',', '/', ':', ';']
@@ -782,7 +789,7 @@ class omni_interval_delay_smooth(object):
         delta_t = np.nanmedian(np.diff(jd * 24. * 60.))
         if delta_t <= 0.:
             raise RuntimeError('Negative or zero delta-t'
-                               + ' (%f minutes) for avg/lag' % (delta_t))
+                               + ' (%f minutes) for avg/lag' % delta_t)
         n_elements = int(np.round(n_mins / delta_t))
         # print('%d minutes convertes to %d elements' % (n_mins,n_elements))
         return n_elements
